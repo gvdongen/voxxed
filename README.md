@@ -110,6 +110,48 @@ Let Mary buy the ticket:
 curl -X POST localhost:8080/CartObject/Mary/checkout
 ```
 
+# Implementing `CartObject/addTicket`
+1. Reserve the ticket → TicketObject/reserve
+2. If success
+	1. Get Set of ticket IDs from K/V state
+	2. Add current ticketID to the state
+	3. Set timer to expire ticket in 15 minutes
+3. Return reservation success
+
+
+# Intermezzo: Resiliency and debugging
+Throw an exception in the addTicket handler and see how Restate handles retries:
+
+```java
+throw new IllegalStateException("The handler failed");
+```
+
+Debug with the CLI:
+
+```shell
+restate invocations list
+restate invocations describe <id> 
+```
+
+
+# Implement `CartObject/checkout`
+1. Get the tickets from state and check if they are not empty
+	1. If empty, return false
+2. Do the payment
+	1. Generate a resilient, unique payment identifier
+	2. Do the payment by creating a stub 
+	```java
+    private boolean pay(String idempotencyKey, double totalPrice){
+        System.out.println("Paying tickets for " + idempotencyKey + " and price " + totalPrice);
+        return true;
+    }
+	```
+3. If payment was success, 
+	1. Call TicketObject/markAsSold for each ticket
+	2. Clear the cart
+	3. Return true (success)
+4. Else return false (failure)
+
 # Implementing `TicketObject/reserve`
 1. Get the `“status”` from Restate K/V state
 2. If the status equals `“Available”`, then 
@@ -136,49 +178,6 @@ Try it out by reserving tickets and see the status change:
 restate kv get TicketObject ticket1
 ```
 
-# Implementing `CartObject/addTicket`
-1. Reserve the ticket → TicketObject/reserve
-2. If success
-	1. Get Set of ticket IDs from K/V state
-	2. Add current ticketID to the state
-	3. Set timer to expire ticket in 15 minutes
-3. Return reservation success
-
-# Implement `CartObject/checkout`
-1. Get the tickets from state and check if they are not empty
-	1. If empty, return false
-2. Do the payment
-	1. Generate a resilient, unique payment identifier
-	2. Do the payment by creating a stub 
-	```java
-    private boolean pay(String idempotencyKey, double totalPrice){
-        System.out.println("Paying tickets for " + idempotencyKey + " and price " + totalPrice);
-        return true;
-    }
-	```
-
-
-# Intermezzo: Resiliency and debugging
-Throw an exception in the addTicket handler and see how Restate handles retries:
-
-```java
-throw new IllegalStateException("The handler failed");
-```
-
-Debug with the CLI:
-
-```shell
-restate invocations list
-restate invocations describe <id> 
-```
-
-# Continue the implementation of `CartObject/checkout`
-1. If payment was success, 
-	1. Call TicketObject/markAsSold for each ticket
-	2. Clear the cart
-	3. Return true (success)
-2. Else return false (failure)
-
 # Implementing `CartObject/expireTicket`
 1. Remove the ticket from the tickets set
 2. If the ticket got removed, then call TicketObject/unreserve
@@ -200,4 +199,4 @@ Check the service logs → no re-execution
 
 # 🎉 Done!
 
-![result](./img/result.png)/home/giselle/dev/debs-2024-restate-tutorial/img
+![result](./img/result.png)
